@@ -1,104 +1,137 @@
 -- Personal Subscription Tracker
--- Database Design based on Group 5 Project Proposal
--- MySQL / MariaDB compatible
+-- Group 5 - Studio 1
+-- Database schema based on the project proposal
 
-CREATE DATABASE IF NOT EXISTS personal_subscription_tracker;
+CREATE DATABASE personal_subscription_tracker;
 USE personal_subscription_tracker;
 
--- =========================================
--- 1. USER
--- =========================================
-CREATE TABLE IF NOT EXISTS `user` (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+DROP TABLE IF EXISTS Recommendation;
+DROP TABLE IF EXISTS Usage_Log;
+DROP TABLE IF EXISTS Payment;
+DROP TABLE IF EXISTS Subscription;
+DROP TABLE IF EXISTS User_Account;
+
+CREATE TABLE User_Account (
+    user_id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    notification_pref BOOLEAN NOT NULL DEFAULT TRUE
+    email VARCHAR(150) NOT NULL UNIQUE,
+    notification_preferences BOOLEAN NOT NULL DEFAULT TRUE
 );
 
--- =========================================
--- 2. SUBSCRIPTION
--- =========================================
-CREATE TABLE IF NOT EXISTS subscription (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE Subscription (
+    subscription_id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
-    name VARCHAR(150) NOT NULL,
-    category VARCHAR(100) NOT NULL,
+    subscription_name VARCHAR(150) NOT NULL,
+    category VARCHAR(50) NOT NULL,
     provider VARCHAR(150) NOT NULL,
     cost DECIMAL(10,2) NOT NULL,
     billing_cycle ENUM('weekly', 'monthly', 'yearly') NOT NULL,
-    renewal_date DATE NOT NULL,
-
-    CONSTRAINT fk_subscription_user
-        FOREIGN KEY (user_id)
-        REFERENCES `user`(id)
+    next_renewal_date DATE NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES User_Account(user_id)
         ON DELETE CASCADE
         ON UPDATE CASCADE
 );
 
--- =========================================
--- 3. PAYMENT
--- =========================================
-CREATE TABLE IF NOT EXISTS payment (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE Payment (
+    payment_id INT AUTO_INCREMENT PRIMARY KEY,
     subscription_id INT NOT NULL,
-    amount DECIMAL(10,2) NOT NULL,
-    paid_on DATE NOT NULL,
-
-    CONSTRAINT fk_payment_subscription
-        FOREIGN KEY (subscription_id)
-        REFERENCES subscription(id)
+    amount_paid DECIMAL(10,2) NOT NULL,
+    payment_date DATE NOT NULL,
+    FOREIGN KEY (subscription_id) REFERENCES Subscription(subscription_id)
         ON DELETE CASCADE
         ON UPDATE CASCADE
 );
 
--- =========================================
--- 4. USAGE LOG
--- =========================================
-CREATE TABLE IF NOT EXISTS usage_log (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE Usage_Log (
+    usage_id INT AUTO_INCREMENT PRIMARY KEY,
     subscription_id INT NOT NULL,
-    used_on DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT fk_usage_log_subscription
-        FOREIGN KEY (subscription_id)
-        REFERENCES subscription(id)
+    usage_timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (subscription_id) REFERENCES Subscription(subscription_id)
         ON DELETE CASCADE
         ON UPDATE CASCADE
 );
 
--- =========================================
--- 5. RECOMMENDATION
--- =========================================
-CREATE TABLE IF NOT EXISTS recommendation (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE Recommendation (
+    recommendation_id INT AUTO_INCREMENT PRIMARY KEY,
     subscription_id INT NOT NULL,
-    type ENUM('cancel', 'downgrade', 'pause') NOT NULL,
+    recommendation_type ENUM('keep', 'cancel', 'downgrade', 'pause') NOT NULL,
+    recommendation_date DATE NOT NULL,
     status ENUM('pending', 'accepted', 'dismissed') NOT NULL DEFAULT 'pending',
-
-    CONSTRAINT fk_recommendation_subscription
-        FOREIGN KEY (subscription_id)
-        REFERENCES subscription(id)
+    FOREIGN KEY (subscription_id) REFERENCES Subscription(subscription_id)
         ON DELETE CASCADE
         ON UPDATE CASCADE
 );
 
--- =========================================
--- OPTIONAL INDEXES
--- =========================================
-CREATE INDEX idx_subscription_user
-    ON subscription(user_id);
+-- Sample data
+INSERT INTO User_Account (name, email, notification_preferences)
+VALUES
+('Priyom Roy', 'priyom@example.com', TRUE);
 
-CREATE INDEX idx_subscription_renewal
-    ON subscription(renewal_date);
+INSERT INTO Subscription
+(user_id, subscription_name, category, provider, cost, billing_cycle, next_renewal_date)
+VALUES
+(1, 'Netflix', 'Streaming', 'Netflix', 22.99, 'monthly', '2026-09-10'),
+(1, 'Spotify', 'Streaming', 'Spotify', 17.99, 'monthly', '2026-09-15'),
+(1, 'Cloud Storage', 'Cloud Storage', 'Google', 3.49, 'monthly', '2026-09-20');
 
-CREATE INDEX idx_payment_subscription
-    ON payment(subscription_id);
+INSERT INTO Payment (subscription_id, amount_paid, payment_date)
+VALUES
+(1, 22.99, '2026-08-10'),
+(2, 17.99, '2026-08-15'),
+(3, 3.49, '2026-08-20');
 
-CREATE INDEX idx_usage_log_subscription
-    ON usage_log(subscription_id);
+INSERT INTO Usage_Log (subscription_id, usage_timestamp)
+VALUES
+(1, '2026-08-12 20:30:00'),
+(1, '2026-08-14 21:00:00'),
+(2, '2026-08-13 18:30:00'),
+(2, '2026-08-16 19:00:00'),
+(3, '2026-08-10 10:00:00');
 
-CREATE INDEX idx_usage_log_date
-    ON usage_log(used_on);
+INSERT INTO Recommendation
+(subscription_id, recommendation_type, recommendation_date, status)
+VALUES
+(1, 'keep', '2026-08-17', 'pending'),
+(2, 'keep', '2026-08-17', 'pending'),
+(3, 'downgrade', '2026-08-17', 'pending');
 
-CREATE INDEX idx_recommendation_subscription
-    ON recommendation(subscription_id);
+-- Useful project queries
+
+-- View all subscriptions for a user
+SELECT *
+FROM Subscription
+WHERE user_id = 1;
+
+-- Calculate total monthly subscription cost
+SELECT SUM(cost) AS total_monthly_cost
+FROM Subscription
+WHERE billing_cycle = 'monthly';
+
+-- Count usage for each subscription
+SELECT
+    s.subscription_name,
+    COUNT(u.usage_id) AS usage_count
+FROM Subscription s
+LEFT JOIN Usage_Log u
+    ON s.subscription_id = u.subscription_id
+GROUP BY s.subscription_id, s.subscription_name;
+
+-- View payments and subscriptions
+SELECT
+    s.subscription_name,
+    p.amount_paid,
+    p.payment_date
+FROM Subscription s
+JOIN Payment p
+    ON s.subscription_id = p.subscription_id
+ORDER BY p.payment_date DESC;
+
+-- View recommendations
+SELECT
+    s.subscription_name,
+    r.recommendation_type,
+    r.status,
+    r.recommendation_date
+FROM Subscription s
+JOIN Recommendation r
+    ON s.subscription_id = r.subscription_id;
